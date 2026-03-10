@@ -9,6 +9,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 :root {
   /* Apple Design System Colors */
@@ -1358,6 +1360,88 @@ tbody tr:hover { background: rgba(0,122,255,0.04); }
 
 <script>
 // =====================================================================
+// FIREBASE REALTIME DATABASE - SYNC
+// =====================================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyBF_hG3bu00s9GGhq39AvsFqU2SgWUmr5c",
+  authDomain: "agendamefmodaehflow.firebaseapp.com",
+  databaseURL: "https://agendamefmodaehflow-default-rtdb.firebaseio.com",
+  projectId: "agendamefmodaehflow",
+  storageBucket: "agendamefmodaehflow.firebasestorage.app",
+  messagingSenderId: "266645954966",
+  appId: "1:266645954966:web:1e02ac12b96ba2ae507db7"
+};
+firebase.initializeApp(firebaseConfig);
+const _fbDb = firebase.database();
+const _fbRef = _fbDb.ref('sistema_agendas');
+let _fbSyncing = false;
+let _fbPushTimer = null;
+let _fbLastModified = 0;
+
+const _FB_KEYS = [
+  'agendas_proximas',
+  'agenda_status_overrides',
+  'agenda_field_overrides',
+  'agenda_deleted_sessions',
+  'agenda_custom_marcas',
+  'agenda_marca_names',
+  'agenda_marca_alvos'
+];
+
+function pushToFirebase() {
+  if (_fbSyncing) return;
+  clearTimeout(_fbPushTimer);
+  _fbPushTimer = setTimeout(function() {
+    try {
+      var data = {};
+      _FB_KEYS.forEach(function(k) {
+        var v = localStorage.getItem(k);
+        data[k] = v ? JSON.parse(v) : null;
+      });
+      _fbLastModified = Date.now();
+      data._lastModified = _fbLastModified;
+      _fbRef.set(data);
+    } catch(e) { console.warn('Firebase push error:', e); }
+  }, 500);
+}
+
+function pullFromFirebase() {
+  _fbRef.once('value').then(function(snap) {
+    var data = snap.val();
+    if (!data) return;
+    if (data._lastModified && data._lastModified <= _fbLastModified) return;
+    _fbSyncing = true;
+    _FB_KEYS.forEach(function(k) {
+      if (data[k] !== undefined && data[k] !== null) {
+        localStorage.setItem(k, JSON.stringify(data[k]));
+      }
+    });
+    _fbLastModified = data._lastModified || Date.now();
+    _fbSyncing = false;
+    if (typeof renderAgenda === 'function') renderAgenda();
+  }).catch(function(e) { console.warn('Firebase pull error:', e); });
+}
+
+function setupRealtimeSync() {
+  _fbRef.on('value', function(snap) {
+    var data = snap.val();
+    if (!data || _fbSyncing) return;
+    if (data._lastModified && data._lastModified <= _fbLastModified) return;
+    _fbSyncing = true;
+    _FB_KEYS.forEach(function(k) {
+      if (data[k] !== undefined && data[k] !== null) {
+        localStorage.setItem(k, JSON.stringify(data[k]));
+      }
+    });
+    _fbLastModified = data._lastModified || Date.now();
+    _fbSyncing = false;
+    if (typeof renderAgenda === 'function') renderAgenda();
+  });
+}
+
+window.addEventListener('online', function() { pushToFirebase(); });
+
+// =====================================================================
 // INICIALIZAÇÃO DE DADOS PADRÃO NO localStorage (para deploy em Vercel)
 // Se o localStorage estiver vazio, carrega os dados padrão embutidos.
 // Se já existirem dados, preserva os existentes.
@@ -1378,6 +1462,7 @@ tbody tr:hover { background: rgba(0,122,255,0.04); }
 
     // agenda_status_overrides, agenda_field_overrides, agenda_deleted_sessions
     // are initialized above. agenda_custom_marcas is null in export, so skip it.
+    pushToFirebase();
   }
 })();
 
@@ -1394,11 +1479,11 @@ const MARCA_NAMES_KEY = 'agenda_marca_names';
 function getCustomMarcas() {
   try { return JSON.parse(localStorage.getItem(CUSTOM_MARCAS_KEY)) || []; } catch { return []; }
 }
-function saveCustomMarcas(list) { localStorage.setItem(CUSTOM_MARCAS_KEY, JSON.stringify(list)); }
+function saveCustomMarcas(list) { localStorage.setItem(CUSTOM_MARCAS_KEY, JSON.stringify(list)); pushToFirebase(); }
 function getMarcaNames() {
   try { return JSON.parse(localStorage.getItem(MARCA_NAMES_KEY)) || {}; } catch { return {}; }
 }
-function saveMarcaNames(map) { localStorage.setItem(MARCA_NAMES_KEY, JSON.stringify(map)); }
+function saveMarcaNames(map) { localStorage.setItem(MARCA_NAMES_KEY, JSON.stringify(map)); pushToFirebase(); }
 function displayName(m) { return getMarcaNames()[m] || m; }
 
 // Alvo de encontros por marca (override)
@@ -1406,7 +1491,7 @@ const MARCA_ALVO_KEY = 'agenda_marca_alvos';
 function getMarcaAlvos() {
   try { return JSON.parse(localStorage.getItem(MARCA_ALVO_KEY)) || {}; } catch { return {}; }
 }
-function saveMarcaAlvos(map) { localStorage.setItem(MARCA_ALVO_KEY, JSON.stringify(map)); }
+function saveMarcaAlvos(map) { localStorage.setItem(MARCA_ALVO_KEY, JSON.stringify(map)); pushToFirebase(); }
 function getAlvo(m) {
   const alvos = getMarcaAlvos();
   if (alvos[m] !== undefined) return +alvos[m];
@@ -2444,6 +2529,7 @@ function getAgendamentos() {
 
 function saveAgendamentos(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  pushToFirebase();
 }
 
 // Status overrides: permite mudar o status de qualquer sessao
@@ -2457,6 +2543,7 @@ function saveStatusOverride(sessionId, newStatus) {
   const overrides = getStatusOverrides();
   overrides[sessionId] = newStatus;
   localStorage.setItem(STATUS_OVERRIDES_KEY, JSON.stringify(overrides));
+  pushToFirebase();
 }
 
 function makeSessionId(marca, encontro, data, hora) {
@@ -2477,6 +2564,7 @@ function saveFieldOverride(sid, field, value) {
   if (!overrides[sid]) overrides[sid] = {};
   overrides[sid][field] = value;
   localStorage.setItem(FIELD_OVERRIDES_KEY, JSON.stringify(overrides));
+  pushToFirebase();
 }
 
 // Sessoes deletadas (ocultas)
@@ -2492,6 +2580,7 @@ function markSessionDeleted(sessionId) {
   const deleted = getDeletedSessions();
   deleted[sessionId] = true;
   localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
+  pushToFirebase();
 }
 
 // =====================================================================
@@ -3015,6 +3104,7 @@ window.deleteSession = function(sid, tipoOriginal) {
   // Limpar overrides orfaos do sid
   const so = getStatusOverrides(); delete so[sid]; localStorage.setItem(STATUS_OVERRIDES_KEY, JSON.stringify(so));
   const fo = getFieldOverrides(); delete fo[sid]; localStorage.setItem(FIELD_OVERRIDES_KEY, JSON.stringify(fo));
+  pushToFirebase();
 
   renderAgenda();
   showToast('Sessao excluida');
@@ -3807,12 +3897,13 @@ function moveSessionToDate(oldSid, newDate) {
     const fo = getFieldOverrides();
     if (so[oldSid]) { so[newSid] = so[oldSid]; delete so[oldSid]; localStorage.setItem(STATUS_OVERRIDES_KEY, JSON.stringify(so)); }
     if (fo[oldSid]) { fo[newSid] = fo[oldSid]; delete fo[oldSid]; localStorage.setItem(FIELD_OVERRIDES_KEY, JSON.stringify(fo)); }
+    pushToFirebase();
   } else {
     // REGISTROS or PRE_AGENDAMENTOS: use field_overrides to store data override
     if (oldDate === newDate) {
       // Dragged back to original date — remove the data override
       const fo = getFieldOverrides();
-      if (fo[oldSid]) { delete fo[oldSid].data; localStorage.setItem(FIELD_OVERRIDES_KEY, JSON.stringify(fo)); }
+      if (fo[oldSid]) { delete fo[oldSid].data; localStorage.setItem(FIELD_OVERRIDES_KEY, JSON.stringify(fo)); pushToFirebase(); }
     } else {
       saveFieldOverride(oldSid, 'data', newDate);
     }
@@ -5264,6 +5355,10 @@ async function exportToImage(data) {
     showToast('Erro ao gerar imagem');
   });
 }
+
+// Firebase: initial sync
+pullFromFirebase();
+setupRealtimeSync();
 </script>
 </body>
 </html>
