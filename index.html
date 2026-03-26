@@ -2050,21 +2050,23 @@ function renderResumoTable() {
   const passado = getPastSessionsByMarca();
   const totalCols = 6;
 
-  // Encontros realizados (done) por marca — para chips coloridos
+  // Encontros realizados (done) por marca — para chips coloridos + contagem total
   const doneEncsPorMarca = {};
-  TODAS_MARCAS.forEach(m => { doneEncsPorMarca[m] = new Set(); });
+  const doneCountPorMarca = {};
+  TODAS_MARCAS.forEach(m => { doneEncsPorMarca[m] = new Set(); doneCountPorMarca[m] = 0; });
   { const sbdAll = buildSessionsByDateUnfiltered();
     Object.values(sbdAll).forEach(sessions => {
       sessions.forEach(s => {
-        if (s.tipo === 'done' && doneEncsPorMarca[s.marca]) doneEncsPorMarca[s.marca].add(s.encontro);
+        if (s.tipo === 'done' && doneEncsPorMarca[s.marca]) {
+          doneEncsPorMarca[s.marca].add(s.encontro);
+          doneCountPorMarca[s.marca]++;
+        }
       });
     });
   }
 
-  const registrosCount = getRegistrosCountPorMarca();
-
   const rows = TODAS_MARCAS.map((m, idx) => {
-    const enc = registrosCount[m];
+    const enc = doneCountPorMarca[m];
     const tipo = tipoMarca(m);
     const alvo = getAlvo(m);
     const pct = ((enc / alvo) * 100).toFixed(0);
