@@ -2050,22 +2050,23 @@ function renderResumoTable() {
   const passado = getPastSessionsByMarca();
   const totalCols = 6;
 
-  // Encontros realizados (done) por marca — para chips coloridos
+  // Encontros realizados (done) por marca — chips coloridos (Set) + contagem total (numero)
   const doneEncsPorMarca = {};
-  TODAS_MARCAS.forEach(m => { doneEncsPorMarca[m] = new Set(); });
+  const doneTotal = {};
+  TODAS_MARCAS.forEach(m => { doneEncsPorMarca[m] = new Set(); doneTotal[m] = 0; });
   { const sbdAll = buildSessionsByDateUnfiltered();
     Object.values(sbdAll).forEach(sessions => {
       sessions.forEach(s => {
-        if (s.tipo === 'done' && doneEncsPorMarca[s.marca]) doneEncsPorMarca[s.marca].add(s.encontro);
+        if (s.tipo === 'done' && doneEncsPorMarca[s.marca]) {
+          doneEncsPorMarca[s.marca].add(s.encontro);
+          doneTotal[s.marca]++;
+        }
       });
     });
   }
 
-  // Debug: log contagem por marca para verificar dados
-  console.log('[Resumo] datesRealizadasPorMarca:', Object.fromEntries(TODAS_MARCAS.map(m => [m, { count: datesRealizadasPorMarca[m].size, dates: [...datesRealizadasPorMarca[m]] }])));
-
   const rows = TODAS_MARCAS.map((m, idx) => {
-    const enc = datesRealizadasPorMarca[m].size;
+    const enc = doneTotal[m];
     const tipo = tipoMarca(m);
     const alvo = getAlvo(m);
     const pct = ((enc / alvo) * 100).toFixed(0);
