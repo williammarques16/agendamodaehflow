@@ -2050,23 +2050,20 @@ function renderResumoTable() {
   const passado = getPastSessionsByMarca();
   const totalCols = 6;
 
-  // Encontros realizados (done) por marca — chips coloridos (Set) + contagem total (numero)
+  // Encontros realizados (done) por marca — chips coloridos
   const doneEncsPorMarca = {};
-  const doneTotal = {};
-  TODAS_MARCAS.forEach(m => { doneEncsPorMarca[m] = new Set(); doneTotal[m] = 0; });
+  TODAS_MARCAS.forEach(m => { doneEncsPorMarca[m] = new Set(); });
   { const sbdAll = buildSessionsByDateUnfiltered();
     Object.values(sbdAll).forEach(sessions => {
       sessions.forEach(s => {
-        if (s.tipo === 'done' && doneEncsPorMarca[s.marca]) {
-          doneEncsPorMarca[s.marca].add(s.encontro);
-          doneTotal[s.marca]++;
-        }
+        if (s.tipo === 'done' && doneEncsPorMarca[s.marca]) doneEncsPorMarca[s.marca].add(s.encontro);
       });
     });
   }
 
   const rows = TODAS_MARCAS.map((m, idx) => {
-    const enc = doneTotal[m];
+    const pastSessions = (passado[m] || []).filter(s => s.tipo !== 'cancelado');
+    const enc = pastSessions.length;
     const tipo = tipoMarca(m);
     const alvo = getAlvo(m);
     const pct = ((enc / alvo) * 100).toFixed(0);
